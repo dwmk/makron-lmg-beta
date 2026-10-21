@@ -253,25 +253,15 @@ export class OrchestratorEngine {
     const isExternal = !details.isLocal;
 
     if (isExternal) {
-      if (details.provider !== 'ollama') {
-        const apiKey = ctx.settings.apiKeys?.[details.provider || ''];
-        if (!apiKey || !apiKey.trim()) {
-          const errorText = `API key for "${details.name}" (${details.provider?.toUpperCase()}) is not configured. Please open the Model selector to enter your API key.`;
-          eventBus.emit({ type: 'error', error: errorText, messageId: ctx.messageId });
-          eventBus.emit({ type: 'state_change', state: 'failed', messageId: ctx.messageId });
-
-          const errorMsg: Message = {
-            id: ctx.messageId,
-            conversationId: ctx.conversationId,
-            role: 'assistant',
-            content: errorText,
-            timestamp: startTime,
-            status: 'error',
-          };
-          await db.saveMessage(errorMsg);
-          this.activeAbortController = null;
-          return errorMsg;
+      if (details.provider !== 'ollama' && details.provider !== 'gemini') {
+        let storedKey = ctx.settings.apiKeys?.[details.provider || ''];
+        if (!storedKey && typeof window !== 'undefined') {
+          try {
+            const raw = JSON.parse(localStorage.getItem('makron_api_keys') || '{}');
+            storedKey = raw[details.provider || ''];
+          } catch {}
         }
+        // Allow request to proceed to server proxy which might have environment credentials
       }
     } else {
       const model = AVAILABLE_MODELS.find((m) => m.id === ctx.modelId) || AVAILABLE_MODELS[0];

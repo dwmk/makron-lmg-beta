@@ -112,17 +112,29 @@ export const PublishedAgentView: React.FC<PublishedAgentViewProps> = ({ customNa
         const data = await res.json();
         setAgent(data.agent);
 
-        // Initial welcome turn
-        setMessages([
-          {
-            id: 'welcome',
-            role: 'assistant',
-            content: `Hello! I am **${data.agent.displayName}**.\n\n${
-              data.agent.description || 'How can I assist you today?'
-            }`,
-            timestamp: Date.now(),
-          },
-        ]);
+        // If conversation history was published, derive those turns for visitor sandbox showcase
+        if (Array.isArray(data.agent.initialMessages) && data.agent.initialMessages.length > 0) {
+          setMessages(
+            data.agent.initialMessages.map((m: any) => ({
+              id: m.id || 'msg_' + Math.random().toString(36).substring(2, 9),
+              role: m.role === 'assistant' ? 'assistant' : 'user',
+              content: m.content,
+              timestamp: m.timestamp || Date.now(),
+            }))
+          );
+        } else {
+          // Initial welcome turn
+          setMessages([
+            {
+              id: 'welcome',
+              role: 'assistant',
+              content: `Hello! I am **${data.agent.displayName}**.\n\n${
+                data.agent.description || 'How can I assist you today?'
+              }`,
+              timestamp: Date.now(),
+            },
+          ]);
+        }
       } catch (err: any) {
         setError(err.message || 'Failed to load agent');
       } finally {

@@ -1,0 +1,44 @@
+{
+  "users": [
+    {
+      "id": "guest_user",
+      "email": "guest_user@makron.local",
+      "passwordHash": "",
+      "name": "Workspace Creator",
+      "username": "creator",
+      "avatar": "ꫧ",
+      "tier": "free",
+      "verifiedType": null,
+      "apiKeys": {},
+      "createdAt": 1792576882704
+    }
+  ],
+  "agents": [
+    {
+      "id": "agt_nhukfqvkn",
+      "userId": "guest_user",
+      "customName": "demo-agent",
+      "displayName": "Demo Agent",
+      "description": "Testing custom agent",
+      "avatar": "ꫧ",
+      "modelId": "gemini-2.5-flash",
+      "gender": "neutral",
+      "systemPrompt": "",
+      "effortLevel": "auto",
+      "skills": [
+        "code_execution",
+        "file_generation"
+      ],
+      "themeColor": "#8b5cf6",
+      "themePreset": "winter_midnight",
+      "themeMode": "dark",
+      "themeBg": "#09090b",
+      "themeCard": "#18181b",
+      "themeText": "#fafafa",
+      "allowsFileUploads": false,
+      "embedEnabled": true,
+      "createdAt": 1792576890197,
+      "updatedAt": 1792576890197
+    }
+  ]
+}

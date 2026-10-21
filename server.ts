@@ -215,27 +215,49 @@ app.get('/api/ping-ollama', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/auth/keys', requireAuth, async (req: AuthRequest, res: Response) => {
+app.get('/api/auth/keys', async (req: Request, res: Response) => {
   try {
-    const user = await dbService.getUserById(req.user!.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    let userId = 'guest_user';
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const user = await dbService.getUserBySessionToken(token);
+      if (user) userId = user.id;
+    }
+    const user = (await dbService.getUserById(userId)) || (await dbService.ensureGuestUser(userId));
     const summary: Record<string, boolean> = {};
-    for (const [k, v] of Object.entries(user.apiKeys || {})) {
+    for (const [k, v] of Object.entries(user?.apiKeys || {})) {
       summary[k] = Boolean(v && v.trim());
     }
+    // Also surface platform environment credentials so they appear active without redundant entry
+    if (process.env.GEMINI_API_KEY) summary['gemini'] = true;
+    if (process.env.OPENAI_API_KEY) summary['openai'] = true;
+    if (process.env.ANTHROPIC_API_KEY) summary['claude'] = true;
+    if (process.env.GROQ_API_KEY) summary['groq'] = true;
+    if (process.env.DEEPSEEK_API_KEY) summary['deepseek'] = true;
+    if (process.env.GROK_API_KEY) summary['grok'] = true;
+
     res.json({ keys: summary });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.put('/api/auth/keys', requireAuth, async (req: AuthRequest, res: Response) => {
+app.put('/api/auth/keys', async (req: Request, res: Response) => {
   try {
+    let userId = 'guest_user';
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const user = await dbService.getUserBySessionToken(token);
+      if (user) userId = user.id;
+    }
+    await dbService.ensureGuestUser(userId);
     const { apiKeys } = req.body;
     if (!apiKeys || typeof apiKeys !== 'object') {
       return res.status(400).json({ error: 'Invalid apiKeys payload' });
     }
-    await dbService.updateUserApiKeys(req.user!.id, apiKeys);
+    await dbService.updateUserApiKeys(userId, apiKeys);
     res.json({ success: true, message: 'API keys saved securely' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -316,6 +338,7 @@ app.post('/api/conversations/publish', async (req: Request, res: Response) => {
       themeMode,
       allowsFileUploads,
       embedEnabled,
+      initialMessages,
     } = req.body;
 
     if (!customName || typeof customName !== 'string') {
@@ -345,6 +368,7 @@ app.post('/api/conversations/publish', async (req: Request, res: Response) => {
         themeMode: themeMode || 'dark',
         allowsFileUploads: Boolean(allowsFileUploads),
         embedEnabled: embedEnabled !== false,
+        initialMessages,
       });
     } else {
       // Create new
@@ -363,6 +387,7 @@ app.post('/api/conversations/publish', async (req: Request, res: Response) => {
         themeMode: themeMode || 'dark',
         allowsFileUploads: Boolean(allowsFileUploads),
         embedEnabled: embedEnabled !== false,
+        initialMessages,
       });
     }
 
@@ -425,6 +450,7 @@ app.get('/api/public/agents/:customName', async (req: Request, res: Response) =>
         allowsFileUploads: agent.allowsFileUploads,
         embedEnabled: agent.embedEnabled,
         owner: agent.owner,
+        initialMessages: agent.initialMessages || [],
       },
     });
   } catch (err: any) {
@@ -459,9 +485,17 @@ app.get('/api/public/agents/:customName/status', async (req: Request, res: Respo
       });
     }
 
-    // 2. Load owner's configured credentials
-    const owner = await dbService.getUserById(agent.userId);
-    const ownerApiKeys = owner?.apiKeys || {};
+    // 2. Load owner's configured credentials with guest and platform fallback
+    const owner = (await dbService.getUserById(agent.userId)) || (await dbService.getUserById('guest_user'));
+    const ownerApiKeys: Record<string, string> = {
+      ...(owner?.apiKeys || {}),
+      ...(process.env.GEMINI_API_KEY ? { gemini: process.env.GEMINI_API_KEY } : {}),
+      ...(process.env.OPENAI_API_KEY ? { openai: process.env.OPENAI_API_KEY } : {}),
+      ...(process.env.ANTHROPIC_API_KEY ? { claude: process.env.ANTHROPIC_API_KEY } : {}),
+      ...(process.env.GROQ_API_KEY ? { groq: process.env.GROQ_API_KEY } : {}),
+      ...(process.env.DEEPSEEK_API_KEY ? { deepseek: process.env.DEEPSEEK_API_KEY } : {}),
+      ...(process.env.GROK_API_KEY ? { grok: process.env.GROK_API_KEY } : {}),
+    };
 
     const timeoutMs = 3500;
 
@@ -587,9 +621,17 @@ app.post('/api/public/agents/:customName/chat', async (req: Request, res: Respon
       return res.status(404).json({ error: `Agent "${customName}" not found.` });
     }
 
-    // Load owner's secure credentials from db
-    const owner = await dbService.getUserById(agent.userId);
-    const ownerApiKeys = owner?.apiKeys || {};
+    // Load owner's secure credentials from db with guest and platform fallback
+    const owner = (await dbService.getUserById(agent.userId)) || (await dbService.getUserById('guest_user'));
+    const ownerApiKeys: Record<string, string> = {
+      ...(owner?.apiKeys || {}),
+      ...(process.env.GEMINI_API_KEY ? { gemini: process.env.GEMINI_API_KEY } : {}),
+      ...(process.env.OPENAI_API_KEY ? { openai: process.env.OPENAI_API_KEY } : {}),
+      ...(process.env.ANTHROPIC_API_KEY ? { claude: process.env.ANTHROPIC_API_KEY } : {}),
+      ...(process.env.GROQ_API_KEY ? { groq: process.env.GROQ_API_KEY } : {}),
+      ...(process.env.DEEPSEEK_API_KEY ? { deepseek: process.env.DEEPSEEK_API_KEY } : {}),
+      ...(process.env.GROK_API_KEY ? { grok: process.env.GROK_API_KEY } : {}),
+    };
 
     let responseText = '';
 
@@ -798,13 +840,26 @@ app.post('/api/chat', async (req: Request, res: Response) => {
   try {
     const { modelId, provider, messages, prompt, systemPrompt, temperature = 0.3, maxTokens = 2048, apiKey } = req.body;
 
-    let userKeys: Record<string, string> = {};
+    let userKeys: Record<string, string> = {
+      ...(req.body.apiKeys || {}),
+      ...(process.env.GEMINI_API_KEY ? { gemini: process.env.GEMINI_API_KEY } : {}),
+      ...(process.env.OPENAI_API_KEY ? { openai: process.env.OPENAI_API_KEY } : {}),
+      ...(process.env.ANTHROPIC_API_KEY ? { claude: process.env.ANTHROPIC_API_KEY } : {}),
+      ...(process.env.GROQ_API_KEY ? { groq: process.env.GROQ_API_KEY } : {}),
+      ...(process.env.DEEPSEEK_API_KEY ? { deepseek: process.env.DEEPSEEK_API_KEY } : {}),
+      ...(process.env.GROK_API_KEY ? { grok: process.env.GROK_API_KEY } : {}),
+    };
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       const user = await dbService.getUserBySessionToken(token);
       if (user?.apiKeys) {
-        userKeys = user.apiKeys;
+        userKeys = { ...user.apiKeys, ...userKeys };
+      }
+    } else {
+      const guest = await dbService.getUserById('guest_user');
+      if (guest?.apiKeys) {
+        userKeys = { ...guest.apiKeys, ...userKeys };
       }
     }
 

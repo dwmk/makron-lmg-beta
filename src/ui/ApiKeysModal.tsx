@@ -6,7 +6,7 @@ interface ApiKeysModalProps {
   isOpen: boolean;
   onClose: () => void;
   token: string | null;
-  onKeysUpdated?: () => void;
+  onKeysUpdated?: (updatedKeys: Record<string, string>) => void;
 }
 
 export const ApiKeysModal: React.FC<ApiKeysModalProps> = ({ isOpen, onClose, token, onKeysUpdated }) => {
@@ -18,19 +18,33 @@ export const ApiKeysModal: React.FC<ApiKeysModalProps> = ({ isOpen, onClose, tok
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen && token) {
+    if (isOpen) {
       loadKeyStatus();
     }
   }, [isOpen, token]);
 
   const loadKeyStatus = async () => {
     try {
+      // 1. Check local storage
+      let localKeys: Record<string, boolean> = {};
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = JSON.parse(localStorage.getItem('makron_api_keys') || '{}');
+          for (const [k, v] of Object.entries(raw)) {
+            if (v && typeof v === 'string' && v.trim()) localKeys[k] = true;
+          }
+        } catch {}
+      }
+
+      // 2. Fetch server status (includes environment keys like gemini)
       const res = await fetch('/api/auth/keys', {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.ok) {
         const data = await res.json();
-        setConfiguredKeys(data.keys || {});
+        setConfiguredKeys({ ...localKeys, ...(data.keys || {}) });
+      } else {
+        setConfiguredKeys(localKeys);
       }
     } catch {
       // ignore
@@ -41,7 +55,6 @@ export const ApiKeysModal: React.FC<ApiKeysModalProps> = ({ isOpen, onClose, tok
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) return;
 
     setLoading(true);
     setError(null);
@@ -56,24 +69,34 @@ export const ApiKeysModal: React.FC<ApiKeysModalProps> = ({ isOpen, onClose, tok
         payload.ollamaUrl = ollamaUrl.trim();
       }
 
+      // 1. Save to local storage for immediate browser usage
+      if (typeof window !== 'undefined') {
+        try {
+          const existing = JSON.parse(localStorage.getItem('makron_api_keys') || '{}');
+          const merged = { ...existing, ...payload };
+          localStorage.setItem('makron_api_keys', JSON.stringify(merged));
+        } catch {}
+      }
+
+      // 2. Persist to server (authenticated user or guest workspace session)
       const res = await fetch('/api/auth/keys', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ apiKeys: payload }),
       });
 
       if (!res.ok) {
-        const d = await res.json();
+        const d = await res.json().catch(() => ({}));
         throw new Error(d.error || 'Failed to save API keys');
       }
 
       setSaved(true);
       setKeysInput({});
       await loadKeyStatus();
-      if (onKeysUpdated) onKeysUpdated();
+      if (onKeysUpdated) onKeysUpdated(payload);
       setTimeout(() => setSaved(false), 2500);
     } catch (err: any) {
       setError(err.message || 'Error updating keys');

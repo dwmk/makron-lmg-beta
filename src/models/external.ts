@@ -43,6 +43,14 @@ export async function generateExternalModel(options: ExternalGenerateOptions): P
   if (provider !== 'ollama' && !cleanKey) {
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('makron_auth_token') : null;
+      let storedKeys: Record<string, string> = {};
+      if (typeof window !== 'undefined') {
+        try {
+          storedKeys = JSON.parse(localStorage.getItem('makron_api_keys') || '{}');
+        } catch {}
+      }
+      const effectiveKey = cleanKey || storedKeys[provider] || undefined;
+
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -52,6 +60,8 @@ export async function generateExternalModel(options: ExternalGenerateOptions): P
         body: JSON.stringify({
           modelId,
           provider,
+          apiKey: effectiveKey,
+          apiKeys: storedKeys,
           messages: formattedMessages,
           prompt,
           temperature,

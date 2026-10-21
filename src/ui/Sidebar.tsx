@@ -187,12 +187,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                   {/* Green Globe indicator on the right side for published custom agents */}
                   {conv.isPublished && (
-                    <span
-                      title={`Published Custom Agent (/agent/${conv.publishedSlug || ''})`}
-                      className="mr-1 flex items-center shrink-0 text-emerald-500 dark:text-emerald-400"
+                    <a
+                      href={`/agent/${conv.publishedSlug || ''}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      title={`Open Published Custom Agent (/agent/${conv.publishedSlug || ''})`}
+                      className="mr-1 flex items-center shrink-0 text-emerald-500 hover:text-emerald-400 p-0.5 rounded transition cursor-pointer"
                     >
                       <Globe className="w-3.5 h-3.5 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
-                    </span>
+                    </a>
                   )}
 
                   {editingId !== conv.id && (

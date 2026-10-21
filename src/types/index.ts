@@ -19,6 +19,7 @@ export interface Conversation {
   effortLevel?: ReasoningLevel;
   allowsFileUploads?: boolean;
   embedEnabled?: boolean;
+  includeHistory?: boolean;
 }
 
 export interface AttachedFile {
@@ -236,6 +237,7 @@ export interface CustomAgent {
   themeText?: string;
   allowsFileUploads: boolean;
   embedEnabled: boolean;
+  initialMessages?: Array<{ id: string; role: 'user' | 'assistant'; content: string; timestamp: number }>;
   owner?: PublicAgentOwner;
   createdAt: number;
   updatedAt: number;

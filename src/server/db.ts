@@ -605,6 +605,11 @@ export const dbService = {
           verifiedType: ownerUser.verifiedType,
         };
       }
+
+      const localMatch = localStore.agents.find((a) => a.customName.toLowerCase() === slug);
+      if (localMatch?.initialMessages) {
+        agentRecord.initialMessages = localMatch.initialMessages;
+      }
     }
 
     return agentRecord;
@@ -731,6 +736,7 @@ export const dbService = {
       themeText,
       allowsFileUploads: Boolean(agentData.allowsFileUploads),
       embedEnabled: agentData.embedEnabled !== false,
+      initialMessages: agentData.initialMessages,
       createdAt: now,
       updatedAt: now,
     };

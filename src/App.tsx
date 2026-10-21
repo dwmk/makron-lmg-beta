@@ -29,6 +29,7 @@ import { Header } from './ui/Header';
 import { MessageList } from './ui/MessageList';
 import { ModelModal } from './ui/ModelModal';
 import { ProfileModal } from './ui/ProfileModal';
+import { PublishAgentModal } from './ui/PublishAgentModal';
 import { PublishedAgentView } from './ui/PublishedAgentView';
 import { SettingsModal } from './ui/SettingsModal';
 import { Sidebar } from './ui/Sidebar';
@@ -87,6 +88,7 @@ export default function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isCustomAgentsModalOpen, setIsCustomAgentsModalOpen] = useState(false);
   const [isApiKeysModalOpen, setIsApiKeysModalOpen] = useState(false);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
 
   // Routing check for published agents and embed widget
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/';
@@ -500,6 +502,7 @@ export default function App() {
           onToggleTheme={handleToggleTheme}
           executionState={executionState}
           workspaceFileCount={workspaceFileCount}
+          onOpenPublishModal={() => setIsPublishModalOpen(true)}
         />
 
         {/* Message Stream Area */}
@@ -577,15 +580,33 @@ export default function App() {
         }}
         apiKeys={settings.apiKeys || {}}
         onUpdateApiKey={async (provider, key) => {
+          const updatedKeys = { ...(settings.apiKeys || {}), [provider]: key };
           const updated = {
             ...settings,
-            apiKeys: { ...(settings.apiKeys || {}), [provider]: key },
+            apiKeys: updatedKeys,
           };
           if (provider === 'huggingface') {
             updated.hfToken = key;
           }
           setSettings(updated);
           await db.saveSettings(updated);
+
+          // Sync unified keys in localStorage
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('makron_api_keys', JSON.stringify(updatedKeys));
+            } catch {}
+          }
+
+          // Sync with backend keys endpoint so server-side proxy immediately has it
+          fetch('/api/auth/keys', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+            },
+            body: JSON.stringify({ apiKeys: { [provider]: key } }),
+          }).catch(() => {});
         }}
         vendorModels={settings.vendorModels || {}}
         onUpdateVendorModel={async (provider, model) => {
@@ -657,7 +678,15 @@ export default function App() {
         isOpen={isApiKeysModalOpen}
         onClose={() => setIsApiKeysModalOpen(false)}
         token={authToken}
-        onKeysUpdated={() => {
+        onKeysUpdated={(newKeys) => {
+          if (newKeys && typeof newKeys === 'object') {
+            const updated = {
+              ...settings,
+              apiKeys: { ...(settings.apiKeys || {}), ...newKeys },
+            };
+            setSettings(updated);
+            db.saveSettings(updated);
+          }
           if (authToken) {
             fetch('/api/auth/me', {
               headers: { Authorization: `Bearer ${authToken}` },
@@ -666,6 +695,21 @@ export default function App() {
               .then((d) => d?.user && setAuthUser(d.user));
           }
         }}
+      />
+
+      {/* Publish Custom Agent Modal */}
+      <PublishAgentModal
+        isOpen={isPublishModalOpen}
+        onClose={() => setIsPublishModalOpen(false)}
+        conversation={activeConv}
+        onSaveConversation={async (updated) => {
+          await db.saveConversation(updated);
+          setActiveConv(updated);
+          setConversations((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+        }}
+        token={authToken}
+        user={authUser}
+        messages={messages}
       />
     </div>
   );

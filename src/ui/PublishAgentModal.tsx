@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { SEASONAL_THEMES } from '../constants/themes';
 import { resolveModelDetails } from '../models/manager';
-import { AgentThemePreset, AuthUser, Conversation, ReasoningLevel } from '../types';
+import { AgentThemePreset, AuthUser, Conversation, Message, ReasoningLevel } from '../types';
 import { AvatarCropperModal } from './AvatarCropperModal';
 
 interface PublishAgentModalProps {
@@ -24,6 +24,7 @@ interface PublishAgentModalProps {
   onSaveConversation: (updated: Conversation) => Promise<void>;
   token: string | null;
   user: AuthUser | null;
+  messages?: Message[];
 }
 
 const AVAILABLE_SKILLS = [
@@ -43,6 +44,7 @@ export const PublishAgentModal: React.FC<PublishAgentModalProps> = ({
   onSaveConversation,
   token,
   user,
+  messages = [],
 }) => {
   const [isPublished, setIsPublished] = useState(false);
   const [slug, setSlug] = useState('');
@@ -58,6 +60,7 @@ export const PublishAgentModal: React.FC<PublishAgentModalProps> = ({
   const [customColor, setCustomColor] = useState('#8b5cf6');
   const [allowsFileUploads, setAllowsFileUploads] = useState(false);
   const [embedEnabled, setEmbedEnabled] = useState(true);
+  const [includeHistory, setIncludeHistory] = useState(true);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +95,7 @@ export const PublishAgentModal: React.FC<PublishAgentModalProps> = ({
     setCustomColor(conversation.themeColor || '#8b5cf6');
     setAllowsFileUploads(Boolean(conversation.allowsFileUploads));
     setEmbedEnabled(conversation.embedEnabled !== false);
+    setIncludeHistory(conversation.includeHistory !== false);
     setError(null);
   }, [isOpen, conversation]);
 
@@ -155,6 +159,17 @@ export const PublishAgentModal: React.FC<PublishAgentModalProps> = ({
 
     try {
       if (isPublished) {
+        const validMessages = includeHistory
+          ? messages
+              .filter((m) => m.content && m.status !== 'error')
+              .map((m) => ({
+                id: m.id,
+                role: m.role,
+                content: m.content,
+                timestamp: m.timestamp,
+              }))
+          : undefined;
+
         // Send publish request to backend
         const res = await fetch('/api/conversations/publish', {
           method: 'POST',
@@ -178,6 +193,7 @@ export const PublishAgentModal: React.FC<PublishAgentModalProps> = ({
             themeMode: SEASONAL_THEMES[themePreset]?.mode || 'dark',
             allowsFileUploads,
             embedEnabled,
+            initialMessages: validMessages,
           }),
         });
 
@@ -211,6 +227,7 @@ export const PublishAgentModal: React.FC<PublishAgentModalProps> = ({
         effortLevel,
         allowsFileUploads,
         embedEnabled,
+        includeHistory,
         updatedAt: Date.now(),
       };
 
@@ -526,7 +543,17 @@ export const PublishAgentModal: React.FC<PublishAgentModalProps> = ({
             </div>
 
             {/* 7. Settings Toggles (Voice, File Uploads, Embed) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-neutral-200 dark:border-neutral-800">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-neutral-200 dark:border-neutral-800">
+              <label className="flex items-center gap-2 p-2 rounded border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-700 dark:text-neutral-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeHistory}
+                  onChange={(e) => setIncludeHistory(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <span>Include Sandbox History</span>
+              </label>
+
               <label className="flex items-center gap-2 p-2 rounded border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-700 dark:text-neutral-300 cursor-pointer">
                 <input
                   type="checkbox"
